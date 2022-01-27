@@ -1,0 +1,10 @@
+[package]
+name = "halo2_hi"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+halo2_proofs  = { git = "https://github.com/zcash/halo2", rev = "d111807798d4719df36dc2b05b0104b69efdceb3"}
+pasta_curves = "0.3"
