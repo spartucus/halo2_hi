@@ -1,7 +1,7 @@
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{AssignedCell, Chip, Layouter, Region, SimpleFloorPlanner},
-    plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Fixed, Instance, Selector},
+    circuit::{AssignedCell, Layouter, SimpleFloorPlanner},
+    plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance, Selector},
     poly::Rotation,
 };
 use halo2_proofs::{dev::MockProver, pasta::Fp};
@@ -84,16 +84,26 @@ impl<F: FieldExt> MyChip<F> {
         a: Number<F>,
         b: Number<F>,
     ) -> Result<Number<F>, Error> {
-        layouter.assign_region(|| "mul", |mut region| {
-            self.config.s_mul.enable(&mut region, 0)?;
+        layouter.assign_region(
+            || "mul",
+            |mut region| {
+                self.config.s_mul.enable(&mut region, 0)?;
 
-            // WHY? column
-            a.0.copy_advice(|| "lhs", &mut region, self.config.advice[0], 0)?;
-            b.0.copy_advice(|| "rhs", &mut region, self.config.advice[1], 0)?;
+                // copy cell value to region's advice cell and constrains them to be equal.
+                a.0.copy_advice(|| "lhs", &mut region, self.config.advice[0], 0)?;
+                b.0.copy_advice(|| "rhs", &mut region, self.config.advice[1], 0)?;
 
-            let value = a.0.value().and_then(|a| b.0.value().map(|b| *a * *b));
-            region.assign_advice(|| "lhs * rhs", self.config.advice[0], 1, || value.ok_or(Error::Synthesis),).map(Number)
-        })
+                let value = a.0.value().and_then(|a| b.0.value().map(|b| *a * *b));
+                region
+                    .assign_advice(
+                        || "lhs * rhs",
+                        self.config.advice[0],
+                        1,
+                        || value.ok_or(Error::Synthesis),
+                    )
+                    .map(Number)
+            },
+        )
     }
 
     fn add(
@@ -102,15 +112,25 @@ impl<F: FieldExt> MyChip<F> {
         a: Number<F>,
         b: Number<F>,
     ) -> Result<Number<F>, Error> {
-        layouter.assign_region(|| "add", |mut region| {
-            self.config.s_add.enable(&mut region, 0)?;
+        layouter.assign_region(
+            || "add",
+            |mut region| {
+                self.config.s_add.enable(&mut region, 0)?;
 
-            a.0.copy_advice(|| "lhs", &mut region, self.config.advice[0], 0)?;
-            b.0.copy_advice(|| "rhs", &mut region, self.config.advice[1], 0)?;
+                a.0.copy_advice(|| "lhs", &mut region, self.config.advice[0], 0)?;
+                b.0.copy_advice(|| "rhs", &mut region, self.config.advice[1], 0)?;
 
-            let value = a.0.value().and_then(|a| b.0.value().map(|b| *a + *b));
-            region.assign_advice(|| "lhs + rhs", self.config.advice[0], 1, || value.ok_or(Error::Synthesis),).map(Number)
-        })
+                let value = a.0.value().and_then(|a| b.0.value().map(|b| *a + *b));
+                region
+                    .assign_advice(
+                        || "lhs + rhs",
+                        self.config.advice[0],
+                        1,
+                        || value.ok_or(Error::Synthesis),
+                    )
+                    .map(Number)
+            },
+        )
     }
 
     fn expose_public(
@@ -141,14 +161,11 @@ impl<F: FieldExt> Circuit<F> for MyCircuit<F> {
     }
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-        let advice = [
-            meta.advice_column(),
-            meta.advice_column(),
-        ];
+        let advice = [meta.advice_column(), meta.advice_column()];
         let instance = meta.instance_column();
         let constant = meta.fixed_column();
 
-        // WHY?
+        // Enable the ability to enforce equality over cells in each column
         meta.enable_equality(instance);
         meta.enable_constant(constant);
         for adc in &advice {
@@ -184,7 +201,11 @@ impl<F: FieldExt> Circuit<F> for MyCircuit<F> {
         }
     }
 
-    fn synthesize(&self, config: Self::Config, mut layouter: impl Layouter<F>) -> Result<(), Error> {
+    fn synthesize(
+        &self,
+        config: Self::Config,
+        mut layouter: impl Layouter<F>,
+    ) -> Result<(), Error> {
         let chip = MyChip::new(config);
 
         let a = chip.load_private(layouter.namespace(|| "load a"), self.a)?;
@@ -196,7 +217,11 @@ impl<F: FieldExt> Circuit<F> for MyCircuit<F> {
         let aa = chip.mul(layouter.namespace(|| "a * a"), a.clone(), a)?;
         let bc = chip.mul(layouter.namespace(|| "b * c"), b, c)?;
         let aa_bc = chip.add(layouter.namespace(|| "a^2 + b*c"), aa, bc)?;
-        let d = chip.mul(layouter.namespace(|| "constant * (a^2 + b * c)"), constant, aa_bc)?;
+        let d = chip.mul(
+            layouter.namespace(|| "constant * (a^2 + b * c)"),
+            constant,
+            aa_bc,
+        )?;
 
         chip.expose_public(layouter.namespace(|| "expose d"), d, 0)
     }
