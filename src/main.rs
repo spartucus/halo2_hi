@@ -1,11 +1,12 @@
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{AssignedCell, Layouter, SimpleFloorPlanner},
+    circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
     plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance, Selector},
     poly::Rotation,
 };
 use halo2_proofs::{dev::MockProver, pasta::Fp};
 use std::marker::PhantomData;
+use plotters::prelude::*;
 
 // const * a^2 + b * c = d
 // a * a + b * c = d
@@ -41,7 +42,7 @@ impl<F: FieldExt> MyChip<F> {
     fn load_private(
         &self,
         mut layouter: impl Layouter<F>,
-        value: Option<F>,
+        value: Value<F>,
     ) -> Result<Number<F>, Error> {
         layouter.assign_region(
             || "load private",
@@ -51,7 +52,7 @@ impl<F: FieldExt> MyChip<F> {
                         || "private input",
                         self.config.advice[0],
                         0,
-                        || value.ok_or(Error::Synthesis),
+                        || value,
                     )
                     .map(Number)
             },
@@ -99,7 +100,7 @@ impl<F: FieldExt> MyChip<F> {
                         || "lhs * rhs",
                         self.config.advice[0],
                         1,
-                        || value.ok_or(Error::Synthesis),
+                        || value,
                     )
                     .map(Number)
             },
@@ -126,7 +127,7 @@ impl<F: FieldExt> MyChip<F> {
                         || "lhs + rhs",
                         self.config.advice[0],
                         1,
-                        || value.ok_or(Error::Synthesis),
+                        || value,
                     )
                     .map(Number)
             },
@@ -146,9 +147,9 @@ impl<F: FieldExt> MyChip<F> {
 #[derive(Default)]
 struct MyCircuit<F: FieldExt> {
     constant: F,
-    a: Option<F>,
-    b: Option<F>,
-    c: Option<F>,
+    a: Value<F>,
+    b: Value<F>,
+    c: Value<F>,
 }
 
 impl<F: FieldExt> Circuit<F> for MyCircuit<F> {
@@ -236,16 +237,44 @@ fn main() {
     // (100 + 15) * 2 = 115 * 2 = 230
     let d = Fp::from(((u32::pow(10, 2) + 5 * 3) * 2) as u64);
 
-    let my_circuit = MyCircuit {
+    let circuit = MyCircuit {
         constant,
-        a: Some(a),
-        b: Some(b),
-        c: Some(c),
+        a: Value::known(a),
+        b: Value::known(b),
+        c: Value::known(c),
     };
 
-    let public_imput = vec![d];
+    let public_input = vec![d];
 
-    let prover = MockProver::run(5, &my_circuit, vec![public_imput]).unwrap();
+    let prover = MockProver::run(5, &circuit, vec![public_input]).unwrap();
     assert_eq!(prover.verify(), Ok(()));
-    // println!("{:?}", prover);
+    println!("{:?}", prover);
+
+    // Create the area you want to draw on.
+    // Use SVGBackend if you want to render to .svg instead.
+    
+    // let root = BitMapBackend::new("layout.png", (1024, 768)).into_drawing_area();
+    // root.fill(&WHITE).unwrap();
+    // let root = root
+    //     .titled("Example Circuit Layout", ("sans-serif", 60))
+    //     .unwrap();
+
+    // halo2_proofs::dev::CircuitLayout::default()
+    //     // You can optionally render only a section of the circuit.
+    //     .view_width(0..2)
+    //     .view_height(0..16)
+    //     // You can hide labels, which can be useful with smaller areas.
+    //     .show_labels(true)
+    //     // Render the circuit onto your area!
+    //     // The first argument is the size parameter for the circuit.
+    //     .render(5, &circuit, &root)
+    //     .unwrap();
+
+
+    // // Generate the DOT graph string.
+    // let dot_string = halo2_proofs::dev::circuit_dot_graph(&circuit);
+
+    // // Now you can either handle it in Rust, or just
+    // // print it out to use with command-line tools.
+    // print!("{}", dot_string);
 }
