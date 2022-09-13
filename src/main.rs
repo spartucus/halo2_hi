@@ -6,7 +6,7 @@ use halo2_proofs::{
 };
 use halo2_proofs::{dev::MockProver, pasta::Fp};
 use std::marker::PhantomData;
-use plotters::prelude::*;
+// use plotters::prelude::*;
 
 // const * a^2 + b * c = d
 // a * a + b * c = d
@@ -229,6 +229,8 @@ impl<F: FieldExt> Circuit<F> for MyCircuit<F> {
 }
 
 fn main() {
+    use std::time::Instant;
+
     let a = Fp::from(10);
     let b = Fp::from(5);
     let c = Fp::from(3);
@@ -246,9 +248,12 @@ fn main() {
 
     let public_input = vec![d];
 
+    let now = Instant::now();
     let prover = MockProver::run(5, &circuit, vec![public_input]).unwrap();
+    let elapsed = now.elapsed();
+    println!("Elapsed: {:.2?}", elapsed);
     assert_eq!(prover.verify(), Ok(()));
-    println!("{:?}", prover);
+    // println!("{:?}", prover);
 
     // Create the area you want to draw on.
     // Use SVGBackend if you want to render to .svg instead.
