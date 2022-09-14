@@ -144,7 +144,7 @@ impl<F: FieldExt> MyChip<F> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct MyCircuit<F: FieldExt> {
     constant: F,
     a: Value<F>,
@@ -230,6 +230,14 @@ impl<F: FieldExt> Circuit<F> for MyCircuit<F> {
 
 fn main() {
     use std::time::Instant;
+    use halo2_proofs::poly::{commitment::Params, Rotation};
+    use halo2_proofs::pasta::{Eq, EqAffine, Fp};
+    use halo2_proofs::plonk::{
+        create_proof, keygen_pk, keygen_vk, verify_proof, Advice, Assigned, BatchVerifier, Circuit,
+        Column, ConstraintSystem, Error, Fixed, SingleVerifier, TableColumn, VerificationStrategy,
+    };
+    use halo2_proofs::transcript::{Blake2bRead, Blake2bWrite, Challenge255, EncodedChallenge};
+    use rand_core::OsRng;
 
     let a = Fp::from(10);
     let b = Fp::from(5);
@@ -246,14 +254,40 @@ fn main() {
         c: Value::known(c),
     };
 
-    let public_input = vec![d];
+    let empty_circuit = MyCircuit {
+        constant,
+        a: Value::unknown(),
+        b: Value::unknown(),
+        c: Value::unknown(),
+    };
 
+    let public_input = vec![d];
+    let k = 5;
+    let params: Params<EqAffine> = Params::new(k);
+
+    // check circuit.
+    let prover = MockProver::run(k, &circuit, vec![public_input]).unwrap();
+    assert_eq!(prover.verify(), Ok(()));
+
+    // create proof
     let now = Instant::now();
-    let prover = MockProver::run(5, &circuit, vec![public_input]).unwrap();
+
+    let vk = keygen_vk(&params, &empty_circuit).expect("keygen_vk should not fail");
+    let pk = keygen_pk(&params, vk, &empty_circuit).expect("keygen_pk should not fail");
+    let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+        // Create a proof
+        create_proof(
+            &params,
+            &pk,
+            &[circuit],
+            &[&[&[d]]],
+            OsRng,
+            &mut transcript,
+        )
+        .expect("proof generation should not fail");
+    let _proof: Vec<u8> = transcript.finalize();
     let elapsed = now.elapsed();
     println!("Elapsed: {:.2?}", elapsed);
-    assert_eq!(prover.verify(), Ok(()));
-    // println!("{:?}", prover);
 
     // Create the area you want to draw on.
     // Use SVGBackend if you want to render to .svg instead.
